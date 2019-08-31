@@ -8,6 +8,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
+import org.junit.Assert.assertEquals
 import org.junit.Test
 
 
@@ -157,11 +158,34 @@ class CoroutinesTest {
             verify(testSubject).suspending()
         }
     }
+
+    @Test
+    fun answerWithSuspendFunction() = runBlocking {
+        val fixture: SomeInterface = mock()
+
+        whenever(fixture.suspendingWithArg(any())).willAnswer {
+            withContext(Dispatchers.Default) { it.getArgument<Int>(0) }
+        }
+
+        assertEquals(5, fixture.suspendingWithArg(5))
+    }
+
+    @Test
+    fun inplaceAnswerWithSuspendFunction() = runBlocking {
+        val fixture: SomeInterface = mock {
+            onBlocking { suspendingWithArg(any()) } willAnswer {
+                withContext(Dispatchers.Default) { it.getArgument<Int>(0) }
+            }
+        }
+
+        assertEquals(5, fixture.suspendingWithArg(5))
+    }
 }
 
 interface SomeInterface {
 
     suspend fun suspending(): Int
+    suspend fun suspendingWithArg(arg: Int): Int
     fun nonsuspending(): Int
 }
 

@@ -25,11 +25,13 @@
 
 package com.nhaarman.mockitokotlin2
 
+import com.nhaarman.mockitokotlin2.internal.JavaSuspendWrapper
 import org.mockito.Mockito
+import org.mockito.internal.invocation.InterceptedInvocation
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
 import org.mockito.stubbing.OngoingStubbing
-import kotlin.DeprecationLevel.ERROR
+import kotlin.coroutines.Continuation
 import kotlin.reflect.KClass
 
 
@@ -123,4 +125,16 @@ infix fun <T> OngoingStubbing<T>.doAnswer(answer: Answer<*>): OngoingStubbing<T>
  */
 infix fun <T> OngoingStubbing<T>.doAnswer(answer: (InvocationOnMock) -> T?): OngoingStubbing<T> {
     return thenAnswer(answer)
+}
+
+infix fun <T> OngoingStubbing<T>.willAnswer(answer: suspend (InvocationOnMock) -> T?): OngoingStubbing<T> {
+    return doAnswer {
+        //all suspend functions/lambdas has Continuation as the last argument.
+        //InvocationOnMock does not see last argument
+        val rawInvocation = it as InterceptedInvocation
+        val continuation = rawInvocation.rawArguments[1] as Continuation<*>
+
+        //This method sometimes returns different object. T? is needed to make it compile.
+        JavaSuspendWrapper.wrapSuspend<T>(continuation, it, answer) as T?
+    }
 }
