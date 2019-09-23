@@ -25,14 +25,16 @@
 
 package com.nhaarman.mockitokotlin2
 
-import com.nhaarman.mockitokotlin2.internal.JavaSuspendWrapper
 import org.mockito.Mockito
 import org.mockito.internal.invocation.InterceptedInvocation
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
 import org.mockito.stubbing.OngoingStubbing
 import kotlin.coroutines.Continuation
+import kotlin.coroutines.startCoroutine
+import kotlin.coroutines.suspendCoroutine
 import kotlin.reflect.KClass
+import kotlin.coroutines.intrinsics.COROUTINE_SUSPENDED
 
 
 /**
@@ -128,13 +130,26 @@ infix fun <T> OngoingStubbing<T>.doAnswer(answer: (InvocationOnMock) -> T?): Ong
 }
 
 infix fun <T> OngoingStubbing<T>.willAnswer(answer: suspend (InvocationOnMock) -> T?): OngoingStubbing<T> {
-    return doAnswer {
+    return thenAnswer {
         //all suspend functions/lambdas has Continuation as the last argument.
         //InvocationOnMock does not see last argument
         val rawInvocation = it as InterceptedInvocation
-        val continuation = rawInvocation.rawArguments[1] as Continuation<*>
+        val continuation = rawInvocation.rawArguments[1] as Continuation<T?>
 
-        //This method sometimes returns different object. T? is needed to make it compile.
-        JavaSuspendWrapper.wrapSuspend<T>(continuation, it, answer) as T?
+        createWrapper(it, answer).startCoroutine(continuation)
+
+        COROUTINE_SUSPENDED
+    } as OngoingStubbing<T>
+}
+
+private fun <T> createWrapper(
+    invocationOnMock: InvocationOnMock,
+    body: suspend (InvocationOnMock) -> T
+): suspend () -> T {
+    return suspend {
+        suspendCoroutine<T> { continuation ->
+            //body is suspend lambda. From Java we got is as regular function so we could simple call it by providing own Continuation
+            body.startCoroutine(invocationOnMock, continuation)
+        }
     }
 }
